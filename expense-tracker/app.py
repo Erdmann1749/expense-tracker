@@ -67,7 +67,7 @@ st.title("Essensausgaben Tracker")
 name = st.text_input("Füge einen Laden hinzu")
 if st.button("Laden der DB hinzufügen"):
     store_names = get_stores()
-    if name.lower() nots in [x.lower() for x in store_names["name"]]:
+    if name.lower() not in [x.lower() for x in store_names["name"]]:
         add_store(name)
     st.rerun()
 
