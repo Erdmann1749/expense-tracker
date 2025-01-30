@@ -18,6 +18,33 @@ def init_expenses_db():
     conn.commit()
     conn.close()
 
+# Funktion zur Migration der Kategorien
+def migrate_categories():
+    conn = sqlite3.connect("expense_tracker/expenses.db")
+    c = conn.cursor()
+    category_mapping = {
+        "Einkauf": "Lebensmittelkauf",
+        "Lieferung": "Essenslieferung",
+        "Restaurant": "Restaurant"
+    }
+    for old, new in category_mapping.items():
+        c.execute("UPDATE expenses SET category = ? WHERE category = ?", (new, old))
+    conn.commit()
+    conn.close()
+
+def migrate_categories_2():
+    conn = sqlite3.connect("expense_tracker/expenses.db")
+    c = conn.cursor()
+    new = "Take-away"
+    stores = [
+        "Hachiko Ramen",
+        "Saveur Banh Mi"
+    ]
+    for store in stores:
+        c.execute("UPDATE expenses SET category = ? WHERE store = ?", (new, store))
+    conn.commit()
+    conn.close()
+
 # Funktion zum Speichern einer Ausgabe
 def add_expense(date, category, amount, store):
     conn = sqlite3.connect("expense_tracker/expenses.db")
@@ -32,6 +59,9 @@ def get_expenses():
     conn = sqlite3.connect("expense_tracker/expenses.db")
     df = pd.read_sql("SELECT * FROM expenses", conn)
     conn.close()
+    df["date"] = pd.to_datetime(df["date"])
+    df["KW"] = df["date"].dt.strftime("KW %U")
+    df = df.sort_values("date", ascending=False).head(10)
     return df
 
 def init_store_db():
@@ -56,18 +86,22 @@ def get_stores():
     conn = sqlite3.connect("expense_tracker/expenses.db")
     store_names = pd.read_sql("SELECT name FROM stores", conn)
     conn.close()
-    return store_names
+    return sorted(store_names.name)
 
-# Initialisiere die Datenbank beim ersten Start
+
+# Initialisiere und migriere die Datenbank
 init_expenses_db()
 init_store_db()
+migrate_categories()
+migrate_categories_2()
+
 
 # Streamlit UI
 st.title("Essensausgaben Tracker")
 name = st.text_input("Füge einen Laden hinzu")
 if st.button("Laden der DB hinzufügen"):
     store_names = get_stores()
-    if name.lower() not in [x.lower() for x in store_names["name"]]:
+    if name.lower() not in [x.lower() for x in store_names]:
         add_store(name)
     st.rerun()
 
@@ -76,12 +110,11 @@ column_1, column_2, column_3, column_4 = st.columns(4)
 with column_1:
     date = st.date_input("Datum", datetime.today())
 with column_2:
-    category = st.selectbox("Kategorie", ["Einkauf", "Lieferung", "Restaurant"])
+    category = st.selectbox("Kategorie", ["Essenslieferung", "Lebensmittelkauf", "Take-away Essen", "Restaurant"])
 with column_3:
     amount = st.number_input("Betrag (€)", min_value=0.0, format="%.2f")
 with column_4:
     stores = get_stores()
-    print(stores)
     store = st.selectbox("Laden", stores)
 
 if st.button("Hinzufügen"):
@@ -95,12 +128,19 @@ if len(df) > 0:
     st.dataframe(df)
 
     # Auswertung der Ausgaben
-    df["date"] = pd.to_datetime(df["date"])
-    df_weekly = df.groupby(pd.Grouper(key="date", freq="W"))["amount"].sum()
+    df_weekly_stacked = df.groupby(["KW", "category"])["amount"].sum().unstack().fillna(0)
+    df_weekly = df.groupby("KW")["amount"].sum()
+    df_weekly = df_weekly.sort_index()  # Ensure chronological order
+    df_weekly_rolled = df_weekly.rolling(window=4, min_periods=1).mean()
+
 
     st.write("### Wöchentliche Ausgaben")
     fig, ax = plt.subplots()
-    df_weekly.plot(kind="bar", ax=ax)
+    df_weekly_stacked.plot(kind="bar", stacked=True, ax=ax)
+    df_weekly_rolled.plot(kind="line", color="red", marker="o", ax=ax)
+    ax.set_xlabel("Kalenderwoche")
+    ax.set_ylabel("Betrag (€)")
+    ax.set_xticklabels(df_weekly_stacked.index, rotation=45)
     st.pyplot(fig)
 
 
