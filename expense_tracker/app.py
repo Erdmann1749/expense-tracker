@@ -38,7 +38,8 @@ def migrate_categories_2():
     new = "Take-away"
     stores = [
         "Hachiko Ramen",
-        "Saveur Banh Mi"
+        "Saveur Banh Mi",
+        "Markt"
     ]
     for store in stores:
         c.execute("UPDATE expenses SET category = ? WHERE store = ?", (new, store))
@@ -98,8 +99,20 @@ migrate_categories_2()
 
 # Streamlit UI
 st.title("Essensausgaben Tracker")
-name = st.text_input("Füge einen Laden hinzu")
-if st.button("Laden der DB hinzufügen"):
+
+column_1, column_2 = st.columns([3, 1])  # Breitenverhältnis anpassen
+with column_1:
+    name = st.text_input(label="", placeholder="Name des Ladens")
+with column_2:
+    st.markdown(
+        """<style>
+        div.stButton { margin-top: 12px; }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    submitted = st.button("Laden hinzufügen")
+
+if submitted:
     store_names = get_stores()
     if name.lower() not in [x.lower() for x in store_names]:
         add_store(name)
@@ -125,7 +138,8 @@ df = get_expenses()
 if len(df) > 0:
     # Anzeigen der gespeicherten Daten
     st.write("### Bisherige Ausgaben")
-    st.dataframe(df)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    st.dataframe(df[["date", "category", "amount", "store"]])
 
     # Auswertung der Ausgaben
     df_weekly_stacked = df.groupby(["KW", "category"])["amount"].sum().unstack().fillna(0)
